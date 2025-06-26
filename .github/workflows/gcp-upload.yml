@@ -1,29 +1,65 @@
-name: Upload to GCP
+name: Upload App Versions to GCP
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:  # Permite ejecutar el workflow manualmente
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g. 1.0.0)'
+        required: true
 
 jobs:
-  upload-to-gcp:
-    runs-on: ubuntu-latest
+  build-and-upload:
+    runs-on: windows-latest
     
     steps:
     - uses: actions/checkout@v2
     
-    # Configurar Google Cloud SDK
+    - name: Setup Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '18'
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Build application
+      run: |
+        npm run build
+        npm run package:win
+    
     - id: 'auth'
       uses: 'google-github-actions/auth@v1'
       with:
         credentials_json: '${{ secrets.GCP_SA_KEY }}'
     
-    # Configurar gcloud CLI
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v1'
     
-    # Subir archivo al bucket
-    - name: 'Upload file to GCP bucket'
+    - name: 'Upload installers to GCP bucket'
       run: |
-        gsutil cp assets/foto.png gs://${{ secrets.GCP_BUCKET_NAME }}/foto.png
+        # Obtener la versión del package.json o usar la versión proporcionada
+        $VERSION="${{ github.event.inputs.version }}"
+        if (-not $VERSION) {
+          $VERSION = (Get-Content package.json | ConvertFrom-Json).version
+        }
+        
+        # Crear y subir metadata.json
+        $metadata = @{
+          version = $VERSION
+          release_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+          platforms = @{
+            windows = "gs://${{ secrets.GCP_BUCKET_NAME }}/versions/$VERSION/windows/ivolution-launcher-setup.exe"
+          }
+        }
+        
+        $metadata | ConvertTo-Json | Set-Content metadata.json
+        
+        # Subir el instalador
+        gsutil cp "release/Ivolution Launcher Setup $VERSION.exe" "gs://${{ secrets.GCP_BUCKET_NAME }}/versions/$VERSION/windows/ivolution-launcher-setup.exe"
+        
+        # Subir metadata
+        gsutil cp metadata.json "gs://${{ secrets.GCP_BUCKET_NAME }}/versions/$VERSION/metadata.json"
+        gsutil cp metadata.json "gs://${{ secrets.GCP_BUCKET_NAME }}/latest-metadata.json"

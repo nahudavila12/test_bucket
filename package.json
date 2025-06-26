@@ -1,0 +1,53 @@
+{
+  "name": "ivolution-launcher",
+  "version": "1.0.0",
+  "description": "Launcher para Ivolution con soporte para Windows y Mac",
+  "main": "dist/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "cross-env NODE_ENV=development concurrently \"tsc -w\" \"electron .\"",
+    "build": "tsc",
+    "package:win": "electron-builder --win --config.win.signAndEditExecutable=false",
+    "package:mac": "electron-builder --mac",
+    "package:all": "electron-builder -mw"
+  },
+  "build": {
+    "appId": "com.ivolution.launcher",
+    "productName": "Ivolution Launcher",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "src/**/*",
+      "assets/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "signAndEditExecutable": false
+    },
+    "mac": {
+      "target": "dmg"
+    }
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^20.11.19",
+    "@types/react": "^18.2.55",
+    "@types/react-dom": "^18.2.19",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^28.2.3",
+    "electron-builder": "^24.9.1",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.11.3",
+    "@emotion/styled": "^11.11.0",
+    "@mui/material": "^5.15.9",
+    "axios": "^1.6.7",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  }
+} 
