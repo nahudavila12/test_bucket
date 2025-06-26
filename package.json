@@ -7,9 +7,9 @@
     "start": "electron .",
     "dev": "cross-env NODE_ENV=development concurrently \"tsc -w\" \"electron .\"",
     "build": "tsc",
-    "package:win": "electron-builder --win --config.win.signAndEditExecutable=false",
-    "package:mac": "electron-builder --mac",
-    "package:all": "electron-builder -mw"
+    "package:win": "electron-builder --win --config.win.signAndEditExecutable=false --publish never",
+    "package:mac": "electron-builder --mac --publish never",
+    "package:all": "electron-builder -mw --publish never"
   },
   "build": {
     "appId": "com.ivolution.launcher",
@@ -28,7 +28,8 @@
     },
     "mac": {
       "target": "dmg"
-    }
+    },
+    "publish": null
   },
   "author": "",
   "license": "ISC",
@@ -40,6 +41,7 @@
     "cross-env": "^7.0.3",
     "electron": "^28.2.3",
     "electron-builder": "^24.9.1",
+    "sharp": "^0.33.2",
     "typescript": "^5.3.3"
   },
   "dependencies": {
@@ -50,4 +52,4 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   }
-} 
+}
