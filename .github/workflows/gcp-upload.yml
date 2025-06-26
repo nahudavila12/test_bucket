@@ -1,0 +1,29 @@
+name: Upload to GCP
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # Permite ejecutar el workflow manualmente
+
+jobs:
+  upload-to-gcp:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v2
+    
+    # Configurar Google Cloud SDK
+    - id: 'auth'
+      uses: 'google-github-actions/auth@v1'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+    
+    # Configurar gcloud CLI
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v1'
+    
+    # Subir archivo al bucket
+    - name: 'Upload file to GCP bucket'
+      run: |
+        gsutil cp assets/test-image.png gs://${{ secrets.GCP_BUCKET_NAME }}/test-image.png 
