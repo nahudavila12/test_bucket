@@ -26,4 +26,4 @@ jobs:
     # Subir archivo al bucket
     - name: 'Upload file to GCP bucket'
       run: |
-        gsutil cp assets/test-image.png gs://${{ secrets.GCP_BUCKET_NAME }}/test-image.png 
+        gsutil cp assets/foto.png gs://${{ secrets.GCP_BUCKET_NAME }}/foto.png
