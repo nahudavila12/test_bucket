@@ -5,10 +5,6 @@ on:
     branches:
       - main
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version number (e.g. 1.0.0)'
-        required: true
 
 jobs:
   build-and-upload:
@@ -16,14 +12,33 @@ jobs:
     
     steps:
     - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0  # Necesario para obtener todos los commits
     
     - name: Setup Node.js
       uses: actions/setup-node@v2
       with:
         node-version: '18'
 
+    - name: Calculate version
+      id: version
+      run: |
+        # Obtener el número de commits en main
+        $COMMIT_COUNT = (git rev-list --count main)
+        # Crear versión en formato MAJOR.MINOR.PATCH
+        # Usamos 1.0.{número de commit} como esquema de versión
+        $VERSION = "1.0.$COMMIT_COUNT"
+        echo "VERSION=$VERSION" >> $env:GITHUB_ENV
+        echo "Version calculated: $VERSION"
+
     - name: Install dependencies
       run: npm install
+
+    - name: Update package.json version
+      run: |
+        $content = Get-Content package.json -Raw | ConvertFrom-Json
+        $content.version = $env:VERSION
+        $content | ConvertTo-Json -Depth 32 | Set-Content package.json
 
     - name: Build application
       run: |
@@ -38,28 +53,59 @@ jobs:
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v1'
     
-    - name: 'Upload installers to GCP bucket'
+    - name: 'Upload version and update index'
       run: |
-        # Obtener la versión del package.json o usar la versión proporcionada
-        $VERSION="${{ github.event.inputs.version }}"
-        if (-not $VERSION) {
-          $VERSION = (Get-Content package.json | ConvertFrom-Json).version
+        # Crear metadata de la versión
+        $commitMessage = git log -1 --pretty=%B
+        $versionMetadata = @{
+          version = $env:VERSION
+          release_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+          requirements = @{
+            minimal = @{
+              ram = "4GB"  # Valores por defecto
+              cpu = "Intel i3 o equivalente"
+              gpu = "Intel HD Graphics"
+            }
+            recommended = @{
+              ram = "8GB"
+              cpu = "Intel i5 o equivalente"
+              gpu = "NVIDIA GTX 1050 o equivalente"
+            }
+          }
+          features = @($commitMessage)  # Usar el mensaje del commit como característica
+          downloadUrl = "gs://${{ secrets.GCP_BUCKET_NAME }}/versions/$env:VERSION/ivolution.exe"
+          commitHash = (git rev-parse HEAD)
+          commitMessage = $commitMessage
         }
         
-        # Crear y subir metadata.json
-        $metadata = @{
-          version = $VERSION
-          release_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-          platforms = @{
-            windows = "gs://${{ secrets.GCP_BUCKET_NAME }}/versions/$VERSION/windows/ivolution-launcher-setup.exe"
+        # Convertir a JSON y guardar
+        $versionMetadata | ConvertTo-Json -Depth 10 | Set-Content version-metadata.json
+        
+        # Subir el ejecutable y metadata
+        gsutil cp "release/Ivolution Launcher Setup $env:VERSION.exe" "gs://${{ secrets.GCP_BUCKET_NAME }}/versions/$env:VERSION/ivolution.exe"
+        gsutil cp version-metadata.json "gs://${{ secrets.GCP_BUCKET_NAME }}/versions/$env:VERSION/metadata.json"
+        
+        # Descargar el índice actual si existe
+        if (gsutil -q stat "gs://${{ secrets.GCP_BUCKET_NAME }}/versions/index.json") {
+          gsutil cp "gs://${{ secrets.GCP_BUCKET_NAME }}/versions/index.json" current-index.json
+          $currentIndex = Get-Content current-index.json | ConvertFrom-Json
+        } else {
+          $currentIndex = @{
+            versions = @()
           }
         }
         
-        $metadata | ConvertTo-Json | Set-Content metadata.json
+        # Agregar o actualizar la versión en el índice
+        $versions = $currentIndex.versions | Where-Object { $_.version -ne $env:VERSION }
+        $versions += $versionMetadata
         
-        # Subir el instalador
-        gsutil cp "release/Ivolution Launcher Setup $VERSION.exe" "gs://${{ secrets.GCP_BUCKET_NAME }}/versions/$VERSION/windows/ivolution-launcher-setup.exe"
+        # Ordenar versiones por número de versión (más reciente primero)
+        $versions = $versions | Sort-Object { [version]$_.version } -Descending
         
-        # Subir metadata
-        gsutil cp metadata.json "gs://${{ secrets.GCP_BUCKET_NAME }}/versions/$VERSION/metadata.json"
-        gsutil cp metadata.json "gs://${{ secrets.GCP_BUCKET_NAME }}/latest-metadata.json"
+        # Crear nuevo índice
+        @{
+          versions = $versions
+        } | ConvertTo-Json -Depth 10 | Set-Content index.json
+        
+        # Subir el nuevo índice
+        gsutil cp index.json "gs://${{ secrets.GCP_BUCKET_NAME }}/versions/index.json"

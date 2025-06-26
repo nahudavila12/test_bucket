@@ -5,10 +5,12 @@ import axios from 'axios';
 
 let mainWindow: BrowserWindow | null = null;
 
+const BUCKET_URL = 'https://storage.googleapis.com/TU_BUCKET';
+
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 900,
-    height: 600,
+    width: 1000,
+    height: 800,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
@@ -17,7 +19,6 @@ function createWindow() {
     backgroundColor: '#1a1a1a'
   });
 
-  // En desarrollo, carga la URL de desarrollo
   if (process.env.NODE_ENV === 'development') {
     mainWindow.loadFile(path.join(__dirname, '..', 'src', 'index.html'));
     mainWindow.webContents.openDevTools();
@@ -44,16 +45,24 @@ app.on('activate', () => {
   }
 });
 
-// Manejo de la descarga de la aplicación
-ipcMain.handle('check-for-updates', async () => {
+// Obtener lista de versiones disponibles
+ipcMain.handle('get-versions', async () => {
   try {
-    const response = await axios.get('https://storage.googleapis.com/TU_BUCKET/latest-metadata.json');
-    return response.data;
+    // Obtener lista de versiones del bucket
+    const response = await axios.get(`${BUCKET_URL}/versions/index.json`);
+    const versions = response.data.versions;
+
+    // Ordenar versiones por fecha de lanzamiento (más reciente primero)
+    return versions.sort((a: any, b: any) => 
+      new Date(b.release_date).getTime() - new Date(a.release_date).getTime()
+    );
   } catch (error) {
+    console.error('Error al obtener versiones:', error);
     throw error;
   }
 });
 
+// Descargar una versión específica
 ipcMain.handle('download-app', async (event, url: string, version: string) => {
   try {
     const response = await axios({
@@ -62,12 +71,15 @@ ipcMain.handle('download-app', async (event, url: string, version: string) => {
       responseType: 'stream'
     });
 
-    const platform = process.platform;
-    const extension = platform === 'win32' ? '.exe' : '.app';
     const downloadPath = path.join(
-      app.getPath('downloads'),
-      `ivolution_v${version}${extension}`
+      app.getPath('userData'),
+      'versions',
+      version,
+      'ivolution.exe'
     );
+
+    // Asegurar que el directorio existe
+    fs.mkdirSync(path.dirname(downloadPath), { recursive: true });
 
     const writer = fs.createWriteStream(downloadPath);
     const totalLength = response.headers['content-length'];
@@ -86,6 +98,7 @@ ipcMain.handle('download-app', async (event, url: string, version: string) => {
       writer.on('error', reject);
     });
   } catch (error) {
+    console.error('Error al descargar:', error);
     throw error;
   }
 }); 
